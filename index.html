@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>등교시 루틴 출석 보드</title>
+
+    <!-- ✅ Tailwind CDN (설치 없이 바로 사용) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Tailwind 색상 조금만 커스터마이징 (선택사항)
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              routineStart: "#f9a8ff",
+              routineEnd: "#a5b4ff",
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- ✅ React + ReactDOM + Babel CDN -->
+    <script
+      src="https://unpkg.com/react@18/umd/react.development.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+      crossorigin
+    ></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+
+  <!-- Tailwind용 기본 배경 -->
+  <body class="bg-slate-900">
+    <!-- React가 그릴 자리 -->
+    <div id="root"></div>
+
+    <!-- ✅ React 코드 (JSX라서 type="text/babel") -->
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
+
+      // 🔹 학생 카드 (배지 + 미션 버튼, 출석 취소는 상위 모달에서 처리)
+      function StudentCard({
+        name,
+        present,
+        onCheckIn,
+        onRequestCancel,
+        onMissionClick,
+        missions,
+        completed,
+      }) {
+        const totalMissions = missions.length;
+        const completedCount = completed ? completed.filter((v) => v).length : 0;
+
+        const handleCardClick = () => {
+          if (present) {
+            onRequestCancel(name);
+          }
+        };
+
+        return (
+          <div
+            className={
+              "relative backdrop-blur rounded-2xl p-3 flex flex-col items-center shadow-md cursor-pointer " +
+              (present ? "bg-emerald-50" : "bg-white/70")
+            }
+            onClick={handleCardClick}
+          >
+            {/* ✅ 출석한 경우 오른쪽 위에 '미션 완료 배지' (펄스) */}
+            {present && totalMissions > 0 && (
+              <div className="absolute -top-2 -right-2">
+                <span className="animate-pulse text-[10px] px-2 py-0.5 rounded-full bg-purple-600 text-white shadow">
+                  {completedCount}/{totalMissions} 미션
+                </span>
+              </div>
+            )}
+
+            {/* 상단: 이름 중앙 정렬 */}
+            <div className="w-full flex items-center justify-center mb-2">
+              <div className="font-semibold text-slate-800 truncate text-center">
+                {name}
+              </div>
+            </div>
+
+            {/* 본문: 출석 / 미션 버튼 */}
+{!present && (
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      onCheckIn(name);
+    }}
+    className="mt-1 w-full rounded-full py-1.5 text-sm font-semibold bg-emerald-500 text-white shadow cursor-pointer hover:bg-emerald-600 transition"
+  >
+    출석
+  </button>
+)}
+
+{present && (
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      onMissionClick(name);
+    }}
+    className="mt-1 w-full rounded-full py-1.5 text-sm font-semibold bg-purple-600 text-white shadow cursor-pointer hover:bg-purple-700 hover:scale-[1.02] transition"
+  >
+    미션
+  </button>
+)}
+          </div>
+        );
+      }
+
+      // 🔹 전체 화면 컴포넌트
+      function App() {
+        // ⭐ 등교 루틴 내용 상태
+        const [routine, setRoutine] = useState([
+          "책가방 정리",
+          "필기구 준비",
+          "알림장 확인",
+          "하루 계획 세우기",
+        ]);
+
+        // ⭐ 오늘의 미션 state
+        const [missions, setMissions] = useState([
+        "알림장 적기",
+        "교실 정리",
+        "급식 예절 지키기",
+        ]);
+
+        // ⭐ 편집 모드 상태 (true면 input으로 보이게)
+        const [editing, setEditing] = useState(false);
+        const [editingMission, setEditingMission] = useState(false);
+
+        // ⭐ 미션 모달용 상태
+  const [activeStudent, setActiveStudent] = useState(null); // 현재 미션 보는 학생 이름
+  const [completedMissions, setCompletedMissions] = useState({}); // { [name]: [bool, bool, ...] }
+  const [attendance, setAttendance] = useState({}); // { [name]: boolean }
+  const [cancelTarget, setCancelTarget] = useState(null); // 출석 취소 대상 학생 이름
+
+    const missionModalRef = useRef(null);
+    const cancelModalRef = useRef(null);
+
+    // 출석 취소 모달 ESC 닫기 + 포커스 이동
+    useEffect(() => {
+      if (cancelTarget && cancelModalRef.current) {
+        cancelModalRef.current.focus();
+      }
+
+      const handleKeyDown = (e) => {
+        if (!cancelTarget) return;
+        if (e.key === "Escape") {
+          e.preventDefault();
+          handleCancelKeep();
+        }
+      };
+
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [cancelTarget]);
+
+  // 미션 모달 ESC 닫기 + 포커스 이동
+  useEffect(() => {
+    // 모달 열릴 때 모달 박스에 포커스
+    if (activeStudent && missionModalRef.current) {
+      missionModalRef.current.focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (!activeStudent) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMissionModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeStudent]);
+
+  // 미션 버튼 눌렀을 때 모달 열기
+  const openMissionModal = (studentName) => {
+    setActiveStudent(studentName);
+  };
+
+  // 모달 닫기
+  const closeMissionModal = () => {
+    setActiveStudent(null);
+  };
+
+  // 학생별 미션 체크 토글
+  const toggleMission = (studentName, index) => {
+    setCompletedMissions((prev) => {
+      const prevArr = prev[studentName] || [];
+      // 현재 missions 길이에 맞춘 새 배열 생성
+      const base = missions.map((_, i) => prevArr[i] || false);
+      base[index] = !base[index];
+      return { ...prev, [studentName]: base };
+    });
+  };
+
+  // 출석 체크/취소 관련 함수
+  const handleCheckIn = (studentName) => {
+    setAttendance((prev) => ({ ...prev, [studentName]: true }));
+  };
+
+  const handleRequestCancel = (studentName) => {
+    setCancelTarget(studentName);
+  };
+
+  const handleCancelKeep = () => {
+    setCancelTarget(null);
+  };
+
+  const handleCancelConfirm = () => {
+    if (cancelTarget) {
+      setAttendance((prev) => {
+        const next = { ...prev };
+        next[cancelTarget] = false;
+        return next;
+      });
+    }
+    setCancelTarget(null);
+  };
+
+        // 여학생 / 남학생 리스트
+        const girls = [
+          "김서연",
+          "이지민",
+          "박하은",
+          "정수아",
+          "최예린",
+          "임채영",
+          "오유진",
+          "강다영",
+          "신아린",
+          "류민지",
+          "서혜원",
+          "조윤아",
+          "배소영",
+        ];
+        const boys = [
+          "김준호",
+          "이도현",
+          "박시우",
+          "정태민",
+          "최현우",
+          "한민재",
+          "임건우",
+          "오준서",
+          "강민수",
+          "윤성진",
+          "신동혁",
+          "류지훈",
+          "서준혁",
+          "조민호",
+          "배준영",
+        ];
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-pink-200 via-purple-200 to-sky-200 text-slate-900 flex flex-col">
+            {/* 상단 탭 바 (간단 버전) */}
+            <header className="flex items-center justify-between px-8 py-4">
+              <div className="flex gap-2 text-sm font-semibold">
+                <span className="px-4 py-2 rounded-full bg-white/70 shadow">
+                  등교
+                </span>
+                <span className="px-4 py-2 rounded-full bg-white/30">
+                  쉬는시간
+                </span>
+                <span className="px-4 py-2 rounded-full bg-white/30">점심</span>
+                <span className="px-4 py-2 rounded-full bg-white/30">수업</span>
+              </div>
+              <div className="px-4 py-2 rounded-full bg-black/20 text-white font-mono text-sm">
+                11:39
+              </div>
+            </header>
+
+            {/* 메인 3컬럼 레이아웃 */}
+            <main className="flex-1 px-8 pb-8">
+              <div className="h-full flex gap-6">
+
+                {/* ⬅ 왼쪽 : 등교시 루틴 */}
+<section className="w-64 bg-white/40 backdrop-blur-xl rounded-3xl p-5 shadow-xl flex flex-col">
+  <h1 className="text-2xl font-bold mb-4">📒 등교 시 루틴</h1>
+
+  <ol className="space-y-3 text-sm">
+    {routine.map((item, idx) => (
+      <li
+        key={idx}
+        className="bg-white rounded-2xl px-4 py-3 shadow flex items-center gap-2"
+      >
+        <span className="font-bold">{idx + 1}.</span>
+
+        {/* 편집 모드일 때 input 변경*/}
+        {editing ? (
+          <label className="flex-1">
+            <input
+              type="text"
+              value={item}
+              onChange={(e) => {
+                const updated = [...routine];
+                updated[idx] = e.target.value;
+                setRoutine(updated);
+              }}
+              className="w-full border-b border-slate-300 bg-transparent outline-none"
+              aria-label={`등교 루틴 ${idx + 1}번`}
+            />
+          </label>
+        ) : (
+          <span className="flex-1">{item}</span>
+        )}
+
+        {/* ❌ 삭제 버튼 — 편집일 때만 */}
+        {editing && (
+        <button
+            onClick={() => setRoutine(routine.filter((_, i) => i !== idx))}
+            className="text-red-500 font-bold cursor-pointer hover:text-red-600 transition"
+        >
+            ✕
+        </button>
+        )}
+      </li>
+    ))}
+  </ol>
+
+  {/* ➕ 항목추가 — 편집일 때만 */}
+  {editing && (
+    <button
+      onClick={() => setRoutine([...routine, "새 루틴"])}
+      className="mt-3 w-full rounded-full bg-blue-500 text-white text-sm px-3 py-1 shadow cursor-pointer hover:bg-blue-600 transition"
+    >
+      ➕ 항목 추가
+    </button>
+  )}
+
+  {/* ✏ 편집 ↔ ✔ 저장 토글 */}
+{editing ? (
+  <button
+    onClick={() => {
+      // 빈 루틴은 자동으로 제거
+      setRoutine(routine.filter((v) => v.trim() !== ""));
+      setEditing(false);
+    }}
+    className="mt-4 rounded-full bg-green-500 text-white text-sm py-2 cursor-pointer hover:bg-green-600 transition"
+  >
+    ✔ 저장
+  </button>
+) : (
+  <button
+    onClick={() => setEditing(true)}
+    className="mt-4 rounded-full bg-gradient-to-r from-sky-400 to-indigo-400 text-white text-sm py-2 cursor-pointer hover:brightness-105 transition"
+  >
+    ✏ 루틴 편집
+  </button>
+)}
+</section>
+
+                {/* ▶ 가운데 : 출석 영역 */}
+                <section className="flex-1 bg-white/50 backdrop-blur-xl rounded-3xl p-6 shadow-xl flex flex-col">
+                  {/* 출석 영역 상단 */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-semibold">출석체크</span>
+                      <span className="px-3 py-1 text-xs rounded-full bg-indigo-500 text-white">
+                        이번주 미완료 항목
+                      </span>
+                      <span className="px-3 py-1 text-xs rounded-full bg-rose-500 text-white">
+                        미체크 30명
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 여학생 / 남학생 제목 박스 */}
+                  <div className="grid grid-cols-2 gap-4 mb-4 text-sm font-semibold">
+                    <div className="bg-sky-100/80 rounded-2xl px-4 py-2 flex items-center justify-between">
+                      <span>👧 여학생 ({girls.length}명)</span>
+                    </div>
+                    <div className="bg-indigo-100/80 rounded-2xl px-4 py-2 flex items-center justify-between">
+                      <span>👦 남학생 ({boys.length}명)</span>
+                    </div>
+                  </div>
+
+                  {/* 🔥 2단 그리드로 여학생/남학생 나누기 */}
+                  <div className="grid grid-cols-2 gap-6 w-full h-full">
+                    {/* 여학생 박스 */}
+                    <div className="bg-pink-50/70 rounded-2xl p-4 shadow-sm">
+                      <h3 className="text-pink-600 font-bold mb-3">
+                        👧 여학생 ({girls.length}명)
+                      </h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        {girls.map((name) => (
+                          <StudentCard
+                            key={name}
+                            name={name}
+                            present={!!attendance[name]}
+                            onCheckIn={handleCheckIn}
+                            onRequestCancel={handleRequestCancel}
+                            onMissionClick={openMissionModal}
+                            missions={missions}
+                            completed={completedMissions[name]}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 남학생 박스 */}
+                    <div className="bg-blue-50/70 rounded-2xl p-4 shadow-sm">
+                      <h3 className="text-blue-600 font-bold mb-3">
+                        👦 남학생 ({boys.length}명)
+                      </h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        {boys.map((name) => (
+                          <StudentCard
+                            key={name}
+                            name={name}
+                            present={!!attendance[name]}
+                            onCheckIn={handleCheckIn}
+                            onRequestCancel={handleRequestCancel}
+                            onMissionClick={openMissionModal}
+                            missions={missions}
+                            completed={completedMissions[name]}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+{/* ➡ 오른쪽 : 오늘의 미션 */}
+<section className="w-64 bg-white/40 backdrop-blur-xl rounded-3xl p-5 shadow-xl flex flex-col">
+  <h2 className="text-2xl font-bold mb-4">🎯 오늘의 미션</h2>
+
+  <ol className="space-y-3 text-sm">
+    {missions.map((item, idx) => (
+      <li
+        key={idx}
+        className="bg-white rounded-2xl px-4 py-3 shadow flex items-center gap-2"
+      >
+        <span className="font-bold">{idx + 1}.</span>
+
+        {/* 편집모드일 때만 input 출력 */}
+        {editingMission ? (
+          <label className="flex-1">
+            <input
+              type="text"
+              value={item}
+              onChange={(e) => {
+                const updated = [...missions];
+                updated[idx] = e.target.value;
+                setMissions(updated);
+              }}
+              className="w-full border-b border-slate-300 bg-transparent outline-none"
+              aria-label={`오늘의 미션 ${idx + 1}번`}
+            />
+          </label>
+        ) : (
+          <span className="flex-1">{item}</span>
+        )}
+
+        {/* ❌ 삭제 버튼 → 편집모드에서만 보이기 */}
+{editingMission && (
+  <button
+    onClick={() =>
+      setMissions(missions.filter((_, i) => i !== idx))
+    }
+    className="text-red-500 font-bold cursor-pointer hover:text-red-600 transition"
+  >
+    ✕
+  </button>
+)}
+      </li>
+    ))}
+  </ol>
+
+  {/* ➕ 추가 버튼 → 편집모드일 때만 */}
+{editingMission && (
+  <button
+    onClick={() => setMissions([...missions, "새 미션"])}
+    className="mt-3 w-full rounded-full bg-blue-500 text-white text-sm px-3 py-1 shadow cursor-pointer hover:bg-blue-600 transition"
+  >
+    ➕ 항목 추가
+  </button>
+)}
+
+  {/* 편집 → 저장 토글 */}
+  {editingMission ? (
+    <button
+      onClick={() => {
+        // 빈 미션은 자동으로 제거
+        setMissions(missions.filter((v) => v.trim() !== ""));
+        setEditingMission(false);
+      }}
+      className="mt-4 rounded-full bg-green-500 text-white text-sm py-2 cursor-pointer hover:bg-green-600 transition"
+    >
+      ✔ 저장
+    </button>
+  ) : (
+    <button
+      onClick={() => setEditingMission(true)}
+      className="mt-4 rounded-full bg-gradient-to-r from-pink-400 to-red-400 text-white text-sm py-2 cursor-pointer hover:brightness-105 transition"
+    >
+      ✏ 미션 편집
+    </button>
+  )}
+</section>
+              </div>
+
+            {/* ✅ 학생 미션 모달 (X 버튼, ESC, 오버레이 클릭 닫기, 기본 포커스 처리) */}
+            {activeStudent && (
+              <div
+                className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+                role="dialog"
+                aria-modal="true"
+                onClick={closeMissionModal} // 오버레이 클릭 시 닫기
+              >
+                <div
+                  ref={missionModalRef}
+                  tabIndex={-1}
+                  className="bg-white rounded-2xl p-6 w-80 shadow-xl outline-none"
+                  onClick={(e) => e.stopPropagation()} // 내용 클릭 시 버블 막기
+                >
+                  {/* 상단 타이틀 + X버튼 */}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">
+                      {activeStudent}의 미션
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={closeMissionModal}
+                      className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs cursor-pointer transition"
+                      aria-label="미션 창 닫기"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <ul className="space-y-2 mb-4">
+                    {missions.map((m, idx) => {
+                      const checked =
+                        completedMissions[activeStudent]?.[idx] || false;
+                      return (
+                        <li
+                          key={idx}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleMission(activeStudent, idx)}
+                            className={
+                              "w-6 h-6 rounded border flex items-center justify-center cursor-pointer transition " +
+                              (checked
+                                ? "bg-purple-500 text-white border-purple-500"
+                                : "border-slate-300 hover:border-purple-400")
+                            }
+                          >
+                            {checked && "✓"}
+                          </button>
+                          <span
+                            className={
+                              checked
+                                ? "line-through text-slate-400"
+                                : "text-slate-800"
+                            }
+                          >
+                            {m}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <button
+                    type="button"
+                    onClick={closeMissionModal}
+                    className="w-full rounded-full bg-slate-700 text-white py-2 text-sm cursor-pointer hover:bg-slate-800 transition"
+                  >
+                    저장
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ✅ 출석 취소 모달 (X 버튼, ESC, 오버레이 클릭 닫기, 기본 포커스 처리) */}
+            {cancelTarget && (
+              <div
+                className="fixed inset-0 bg-black/40 flex items-center justify-center z-40"
+                role="dialog"
+                aria-modal="true"
+                onClick={handleCancelKeep} // 오버레이 클릭 시 닫기
+              >
+                <div
+                  ref={cancelModalRef}
+                  tabIndex={-1}
+                  className="bg-white rounded-2xl p-5 w-72 shadow-xl text-xs outline-none"
+                  onClick={(e) => e.stopPropagation()} // 내용 클릭 시 버블 막기
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-slate-800 text-xs">
+                      {cancelTarget} 학생의 출석을 취소할까요?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCancelKeep}
+                      className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs cursor-pointer transition"
+                      aria-label="출석 취소 창 닫기"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={handleCancelKeep}
+                      className="px-3 py-1 rounded-full text-[11px] bg-slate-200 text-slate-700 cursor-pointer hover:bg-slate-300 transition"
+                    >
+                      유지하기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelConfirm}
+                      className="px-3 py-1 rounded-full text-[11px] bg-red-500 text-white cursor-pointer hover:bg-red-600 transition"
+                    >
+                      취소하기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            </main>
+          </div>
+        );
+      }
+
+      // 🔚 React를 #root에 렌더링
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>

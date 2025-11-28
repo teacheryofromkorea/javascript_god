@@ -1,0 +1,121 @@
+<h2>appending</h2>
+
+<input id="workoutInput" placeholder="예: 푸쉬업 30개" />
+<button id="addBtn">추가</button>
+<button id="removeBtn">마지막 제거</button>
+<ul id="workoutList"></ul>
+
+<script>
+
+  const workoutList = document.getElementById('workoutList')
+  const workoutInput = document.getElementById('workoutInput')
+  const removeBtn = document.getElementById('removeBtn')
+  const addBtn = document.getElementById('addBtn')
+
+  function styleApply() {
+    if (s.done) {
+      li.style.textDecoration = 'line-through'
+      li.style.opacity = '0.5'
+    } else {
+      li.style.textDecoration = 'none'
+      li.style.opacity = '1'
+    }
+  }
+
+
+
+  // 🧩 TODO (너가 작성)
+
+  // 1) RAM = [] 만들기
+  // 2) localStorage.getItem('workouts') 로 저장된 기록 가져오기
+  // 3) JSON.parse → RAM에 넣기
+  // 4) 저장된 기록들을 li로 렌더링
+  // 5) 추가 버튼 클릭 시
+  //      - input.value 읽고
+  //      - RAM.push()
+  //      - li 만들어서 화면에 표시
+  //      - localStorage.setItem() 저장
+  //
+  // 6) 삭제 버튼 클릭 시
+  //      - RAM.pop()
+  //      - 화면에서 마지막 li 제거
+  //      - localStorage 다시 저장
+  //
+
+  let RAM = [] // 도화지 만들기 ( 화면에 보이는건 아님, 화면에 보이려면 appendchild to workoutList )
+
+  const dataLine = localStorage.getItem('workouts') // 저장소에서 데이터 "문자열" 가져오기
+
+  if (dataLine) {
+    RAM = JSON.parse(dataLine) // 데이터 "문자열"을 "배열"로 바꾸고 -> 도화지에 넣기
+
+    RAM.forEach( (s) => { // 데이터 "배열"을 하나씩 돌아다니면서 li에 하나씩 할당함
+      const li = document.createElement('li') // 각개 "li" 만들기
+      li.textContent = s // 배열 요소 하나당 li 하나씩 할당하기 + 화면에 표시하기
+
+      const btn = document.createElement('button')
+      btn.textContent = 'X'
+      btn.addEventListener('click', () => {
+        li.remove()
+
+        const index = RAM.indexOf(s)
+        if(index !== -1 ) {
+          RAM.splice(index, 1)
+          localStorage.setItem('workouts', JSON.stringify(RAM))
+        }
+      })
+
+      workoutList.appendChild(li)
+      li.appendChild(btn)
+
+      li.addEventListener('click', () => {
+        s.done = !s.done
+        styleApply()
+        localStorage.setItem('workouts', JSON.stringify(RAM))
+      })
+    })
+  }
+
+  //추가 버튼 눌렀을 때 
+  
+  addBtn.addEventListener('click', () => {
+    const getInput = workoutInput.value // 입력창에서 값 가져오기
+
+    RAM.push({text : getInput, done : false}) // 도화지에 입력한거 push하기
+
+    const li = document.createElement('li') // 각개 li 만들기
+    li.textContent = getInput // 각개 li 에 입력값 할당하기
+    workoutList.appendChild(li) // ul 에 Li 넣기
+    localStorage.setItem('workouts', JSON.stringify(RAM)) // 저장소에 저장하기
+
+    const btn = document.createElement('button')
+      btn.textContent = 'X'
+      btn.addEventListener('click', () => {
+        li.remove()
+
+        const index = RAM.indexOf(getInput)
+        if(index !== -1 ) {
+          RAM.splice(index, 1)
+          localStorage.setItem('workouts', JSON.stringify(RAM))
+        }
+      })
+
+      workoutList.appendChild(li)
+      li.appendChild(btn)
+  })
+
+  // 삭제 버튼 눌렀을 때
+
+  removeBtn.addEventListener('click', () => {
+
+    if (RAM.length === 0) return ;
+
+    RAM.pop()
+    
+    const lastLi = workoutList.lastElementChild
+    lastLi.remove()
+
+    localStorage.setItem('workouts',JSON.stringify(RAM))
+  })
+
+</script>

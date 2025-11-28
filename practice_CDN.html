@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><title>클로저로 데이터 은닉 - Step A</title></head>
+<body>
+  <h2>🧪 클로저 연습: 입금만 되는 지갑</h2>
+
+  <script>
+    // TODO 1) createWallet 함수를 만든다.
+    //   - 내부에 let balance = 0 (외부에서 접근 불가)
+    //   - { deposit } 객체를 return (오직 deposit 메서드만 제공)
+
+    function createWallet () {
+        let balance = 0;
+        
+        return { 
+            
+            deposit (amount) {
+            balance += amount
+            console.log(`입금 : ${amount}원, 현재 잔액 : ${balance}원`) },
+
+            withdraw (amount) {
+            if (amount > balance) {
+                console.log('잔액 부족')
+            } else {
+                balance -= amount
+                console.log(`출금 : ${amount}원, 현재 잔액 : ${balance}원`)
+            }
+            },
+
+            getBalance () {
+                console.log(`현재 잔액 : ${balance}원`)
+            }
+         }
+    }
+
+    const myWallet = createWallet()
+    myWallet.deposit(1000);
+    myWallet.deposit(500);
+    myWallet.withdraw(300)
+    myWallet.getBalance()
+    console.log(myWallet.balance)
+
+    // TODO 2) deposit(amount):
+    //   - balance 에 amount 더하기
+    //   - console.log로: "입금: {amount}원, 현재 잔액: {balance}원"
+
+    // TODO 3) 사용 예시:
+    //   - const myWallet = createWallet();
+    //   - myWallet.deposit(1000);
+    //   - myWallet.deposit(500);
+    //   - (검증) console.log(myWallet.balance)  // undefined 이어야 함
+
+
+
+
+  const person = {
+  name: "민수",
+  sayHi() {
+    console.log("안녕, 나는 " + this.name);
+  }
+};
+
+const hi = person.sayHi;  // 함수만 변수에 따로 담음
+hi();  // 호출
+
+  </script>
+</body>
+</html>
